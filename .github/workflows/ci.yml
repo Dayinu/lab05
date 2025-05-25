@@ -12,17 +12,30 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential cmake libgtest-dev lcov
-        
-    - name: Build and test
+
+    - name: Configure and Build
       run: |
-        mkdir build
+        # Создаем отдельную директорию для сборки
+        mkdir -p build
         cd build
-        cmake ../banking -DBUILD_TESTING=ON -DCMAKE_CXX_FLAGS="--coverage"
-        cmake --build .
-        ctest --output-on-failure
         
-    - name: Upload coverage
+        # Указываем правильный путь к корню проекта
+        cmake .. -DBUILD_TESTING=ON -DCMAKE_CXX_FLAGS="--coverage"
+        
+        # Собираем проект
+        cmake --build .
+
+    - name: Run tests
+      run: |
+        cd build && ctest --output-on-failure
+
+    - name: Generate coverage
+      run: |
+        lcov --capture --directory build --output-file coverage.info
+        lcov --remove coverage.info '/usr/*' --output-file coverage.info
+
+    - name: Upload to Coveralls
       uses: coverallsapp/github-action@v2
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        path-to-lcov: build/coverage.info
+        path-to-lcov: coverage.info
