@@ -137,6 +137,8 @@ EOF
 
 ```
 
+[![Coverage Status](https://coveralls.io/repos/github/Dayinu/lab05/badge.svg?branch=main)](https://coveralls.io/github/Dayinu/lab05?branch=main)
+
 ## Links
 
 - [C++ CI: Travis, CMake, GTest, Coveralls & Appveyor](http://david-grs.github.io/cpp-clang-travis-cmake-gtest-coveralls-appveyor/)
