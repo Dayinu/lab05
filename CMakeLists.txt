@@ -1,36 +1,23 @@
-cmake_minimum_required(VERSION 3.10)
-project(BankingProject LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 17)
+cmake_minimum_required(VERSION 3.4)
+project(Test_banking)
+set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(banking
-    banking/Account.cpp
-    banking/Transaction.cpp
-)
+option(BUILD_TESTS "Build tests" OFF)
 
-target_include_directories(banking PUBLIC
-    /banking
-)
+if(BUILD_TESTS)
+  add_compile_options(--coverage)
+endif()
 
-option(BUILD_TESTING "Build tests" ON)
+add_library(banking STATIC ${CMAKE_CURRENT_SOURCE_DIR}/banking/Transaction.cpp ${CMAKE_CURRENT_SOURCE_DIR}/banking/Account.cpp)
+target_include_directories(banking PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/banking)
+target_link_libraries(banking gcov)
 
-if(BUILD_TESTING)
-    enable_testing()
-    
-    find_package(GTest REQUIRED)
-    
-    add_executable(banking_tests
-        tests/AccountTest.cpp
-        tests/TransactionTest.cpp
-    )
-    
-    target_link_libraries(banking_tests
-        PRIVATE
-        banking
-        GTest::GTest
-        GTest::Main
-    )
-    
-    add_test(NAME banking_tests COMMAND banking_tests)
+if(BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(third-party/gtest)
+  file(GLOB BANKING_TEST_SOURCES tests/*.cpp)
+  add_executable(check ${BANKING_TEST_SOURCES})
+  target_link_libraries(check banking gtest_main gmock_main)
+  add_test(NAME check COMMAND check)
 endif()
