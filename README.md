@@ -37,7 +37,6 @@ if(BUILD_TESTING)
     
     find_package(GTest REQUIRED)
     
-    # Тестовый исполняемый файл
     add_executable(banking_tests
         tests/AccountTest.cpp
         tests/TransactionTest.cpp
