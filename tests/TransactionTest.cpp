@@ -1,51 +1,36 @@
+#include <Account.h>
+#include <Transaction.h>
 #include <gtest/gtest.h>
-#include "Transaction.h"
-#include "Account.h"
 
-using ::testing::Return;
-using ::testing::Throw;
-using ::testing::_;
+TEST(Transaction, Banking) {
+    const int initial_balance_Alice = 10000;
+    const int initial_balance_Bob = 2000;
+    const int transaction_fee = 50;
 
-class MockAccount : public Account {
-public:
-    MockAccount(int id, int balance) : Account(id, balance) {}
-    MOCK_METHOD(int, GetBalance, (), (const, override));
-    MOCK_METHOD(void, ChangeBalance, (int), (override));
-    MOCK_METHOD(void, Lock, (), (override));
-    MOCK_METHOD(void, Unlock, (), (override));
-};
+    Account Alice(0, initial_balance_Alice), Bob(1, initial_balance_Bob);
+    Transaction test_tran;
 
-class MockTransaction : public Transaction {
-public:
-    MOCK_METHOD(void, SaveToDataBase, (Account&, Account&, int), (override));
-};
+    ASSERT_EQ(test_tran.fee(), 1);
+    test_tran.set_fee(transaction_fee);
+    ASSERT_EQ(test_tran.fee(), transaction_fee);
 
-TEST(TransactionTest, MakeTransferSuccess) {
-    MockAccount from(1, 2000);
-    MockAccount to(2, 1000);
-    MockTransaction tr;
-    
-    EXPECT_CALL(from, Lock());
-    EXPECT_CALL(to, Lock());
-    EXPECT_CALL(from, GetBalance()).WillOnce(Return(2000));
-    EXPECT_CALL(from, ChangeBalance(-121)).WillOnce(Return());
-    EXPECT_CALL(to, ChangeBalance(120)).WillOnce(Return());
-    
-    tr.set_fee(1);
-    bool result = tr.Make(from, to, 120);
-    
-    EXPECT_TRUE(result);
-}
+    ASSERT_THROW(test_tran.Make(Alice, Alice, 2000), std::logic_error);
+    ASSERT_THROW(test_tran.Make(Alice, Bob, -100), std::invalid_argument);
+    ASSERT_THROW(test_tran.Make(Alice, Bob, 50), std::logic_error);
 
-TEST(TransactionTest, InvalidSameAccount) {
-    MockAccount acc(1, 1000);
-    Transaction tr;
-    EXPECT_THROW(tr.Make(acc, acc, 100), std::logic_error);
-}
+    if (test_tran.fee() * 2 - 1 >= 200) {
+        ASSERT_FALSE(test_tran.Make(Alice, Bob, test_tran.fee() * 2 - 1));
+    }
 
-TEST(TransactionTest, InvalidNegativeSum) {
-    MockAccount from(1, 1000);
-    MockAccount to(2, 1000);
-    Transaction tr;
-    EXPECT_THROW(tr.Make(from, to, -50), std::invalid_argument);
+    Alice.Lock();
+    ASSERT_THROW(test_tran.Make(Alice, Bob, 2000), std::runtime_error);
+    Alice.Unlock();
+
+    ASSERT_TRUE(test_tran.Make(Alice, Bob, 2000));
+    ASSERT_EQ(Bob.GetBalance(), initial_balance_Bob + 2000);	
+    ASSERT_EQ(Alice.GetBalance(), initial_balance_Alice - 2000 - transaction_fee);
+
+    ASSERT_FALSE(test_tran.Make(Alice, Bob, 8000));
+    ASSERT_EQ(Bob.GetBalance(), initial_balance_Bob + 2000);	
+    ASSERT_EQ(Alice.GetBalance(), initial_balance_Alice - 2000 - transaction_fee);
 }
