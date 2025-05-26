@@ -58,81 +58,117 @@ $ mkdir -p tests
 $ cd tests                   
                                                                                      
 $ cat << EOF > AccountTest.cpp
+#include <Account.h>
 #include <gtest/gtest.h>
-#include <gmock/gmock.h>
-#include "../banking/Account.h"
 
-using ::testing::Return;
-using ::testing::_;
+TEST(Account, Banking){
+	Account test(0,0);
+	
+	ASSERT_EQ(test.GetBalance(), 0);
+	
+	ASSERT_THROW(test.ChangeBalance(100), std::runtime_error);
+	
+	test.Lock();
+	
+	ASSERT_NO_THROW(test.ChangeBalance(100));
+	
+	ASSERT_EQ(test.GetBalance(), 100);
 
-class MockAccount : public Account {
-public:
-    MockAccount(int id, int balance) : Account(id, balance) {}
-    MOCK_METHOD(int, GetBalance, (), (const, override));
-    MOCK_METHOD(void, ChangeBalance, (int), (override));
-    MOCK_METHOD(void, Lock, (), (override));
-    MOCK_METHOD(void, Unlock, (), (override));
-};
+	ASSERT_THROW(test.Lock(), std::runtime_error);
 
-TEST(AccountTest, LockThrowsIfAlreadyLocked) {
-    MockAccount acc(1, 1000);
-    EXPECT_CALL(acc, Lock()).WillOnce(testing::Throw(std::runtime_error("already locked")));
-    ASSERT_THROW(acc.Lock(), std::runtime_error);
+	test.Unlock();
+	ASSERT_THROW(test.ChangeBalance(100), std::runtime_error);
 }
 EOF
 
                                                                                      
 $ cat << EOF > TransactionTest.cpp
+#include <Account.h>
+#include <Transaction.h>
 #include <gtest/gtest.h>
-#include <gmock/gmock.h>
-#include "../banking/Transaction.h"
-#include "../banking/Account.h"
 
-using ::testing::Return;
-using ::testing::_;
+TEST(Transaction, Banking) {
+    const int initial_balance_Alice = 10000;
+    const int initial_balance_Bob = 2000;
+    const int transaction_fee = 50;
 
-TEST(TransactionTest, MakeFailsWhenFeeTooHigh) {
-    Transaction tr;
-    tr.set_fee(100);
-    
-    MockAccount from(1, 200);
-    MockAccount to(2, 100);
-    
-    EXPECT_FALSE(tr.Make(from, to, 50));
+    Account Alice(0, initial_balance_Alice), Bob(1, initial_balance_Bob);
+    Transaction test_tran;
+
+    ASSERT_EQ(test_tran.fee(), 1);
+    test_tran.set_fee(transaction_fee);
+    ASSERT_EQ(test_tran.fee(), transaction_fee);
+
+    ASSERT_THROW(test_tran.Make(Alice, Alice, 2000), std::logic_error);
+    ASSERT_THROW(test_tran.Make(Alice, Bob, -100), std::invalid_argument);
+    ASSERT_THROW(test_tran.Make(Alice, Bob, 50), std::logic_error);
+
+    if (test_tran.fee() * 2 - 1 >= 200) {
+        ASSERT_FALSE(test_tran.Make(Alice, Bob, test_tran.fee() * 2 - 1));
+    }
+
+    Alice.Lock();
+    ASSERT_THROW(test_tran.Make(Alice, Bob, 2000), std::runtime_error);
+    Alice.Unlock();
+
+    ASSERT_TRUE(test_tran.Make(Alice, Bob, 2000));
+    ASSERT_EQ(Bob.GetBalance(), initial_balance_Bob + 2000);	
+    ASSERT_EQ(Alice.GetBalance(), initial_balance_Alice - 2000 - transaction_fee);
+
+    ASSERT_FALSE(test_tran.Make(Alice, Bob, 8000));
+    ASSERT_EQ(Bob.GetBalance(), initial_balance_Bob + 2000);	
+    ASSERT_EQ(Alice.GetBalance(), initial_balance_Alice - 2000 - transaction_fee);
 }
 EOF
                                                                                      
 $ mkdir -p .github/workflows
                                                                                      
 $ cat << EOF > .github/workflows/ci.yml
-name: CI
+name: Actions_for_tests
 
-on: [push, pull_request]
+on:
+ push:
+  branches: [main]
+ pull_request:
+  branches: [main]
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential cmake libgtest-dev lcov
-        
-    - name: Build and test
-      run: |
-        mkdir build
-        cd build
-        cmake ../banking -DBUILD_TESTING=ON -DCMAKE_CXX_FLAGS="--coverage"
-        cmake --build .
-        ctest --output-on-failure
-        
-    - name: Upload coverage
-      uses: coverallsapp/github-action@v2
-      with:
-        github-token: \${{ secrets.GITHUB_TOKEN }}
-        path-to-lcov: build/coverage.info
+jobs: 
+ build_Linux:
+
+  runs-on: ubuntu-latest
+
+  steps:
+  - uses: actions/checkout@v3
+
+  - name: Adding gtest
+    run: git clone https://github.com/google/googletest.git third-party/gtest -b release-1.11.0
+
+  - name: Install lcov
+    run: sudo apt-get install -y lcov
+
+  - name: Config banking with tests
+    run: cmake -H. -B ${{github.workspace}}/build -DBUILD_TESTS=ON
+
+  - name: Build banking
+    run: cmake --build ${{github.workspace}}/build
+
+  - name: Run tests
+    run: build/check
+
+
+  - name: Create coverage directory
+    run: mkdir -p coverage
+
+  - name: Set permissions for coverage directory
+    run: chmod -R 777 coverage
+
+  - name: Do lcov stuff
+    run: lcov -c -d build/CMakeFiles/banking.dir/banking/ --include *.cpp --output-file ./coverage/lcov.info
+
+  - name: Publish to coveralls.io
+    uses: coverallsapp/github-action@v1.1.2
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
 EOF
 
 ```
