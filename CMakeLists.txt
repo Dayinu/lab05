@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_TESTS "Build tests" OFF)
 
+target_include_directories(tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/banking)
+
 if(BUILD_TESTS)
   add_compile_options(--coverage)
   
