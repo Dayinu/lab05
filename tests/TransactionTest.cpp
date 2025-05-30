@@ -1,36 +1,84 @@
-#include <Account.h>
-#include <Transaction.h>
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-TEST(Transaction, Banking) {
-    const int initial_balance_Alice = 10000;
-    const int initial_balance_Bob = 2000;
-    const int transaction_fee = 50;
+#include "Account.h"
+#include "Transaction.h"
 
-    Account Alice(0, initial_balance_Alice), Bob(1, initial_balance_Bob);
-    Transaction test_tran;
+using ::testing::Return;
+using ::testing::Throw;
+using ::testing::_;
 
-    ASSERT_EQ(test_tran.fee(), 1);
-    test_tran.set_fee(transaction_fee);
-    ASSERT_EQ(test_tran.fee(), transaction_fee);
+class MyAccount : public Account {
+public:
+    MyAccount(int id, int balance) : Account(id, balance) {}
+    MOCK_CONST_METHOD0(GetBalance, int());
+    MOCK_METHOD1(ChangeBalance, void(int diff));
+    MOCK_METHOD0(Lock, void());
+    MOCK_METHOD0(Unlock, void());
+};
 
-    ASSERT_THROW(test_tran.Make(Alice, Alice, 2000), std::logic_error);
-    ASSERT_THROW(test_tran.Make(Alice, Bob, -100), std::invalid_argument);
-    ASSERT_THROW(test_tran.Make(Alice, Bob, 50), std::logic_error);
+// Использование Gmock, нужно, но не везде, поэтому Transaction без него
 
-    if (test_tran.fee() * 2 - 1 >= 200) {
-        ASSERT_FALSE(test_tran.Make(Alice, Bob, test_tran.fee() * 2 - 1));
-    }
+TEST(Account, Locker) {
+    MyAccount acc(0, 1111);
+	EXPECT_CALL(acc, Lock()).Times(2);
+	EXPECT_CALL(acc, Unlock()).Times(1);
+	acc.Lock();
+	acc.Lock();
+	acc.Unlock();
+}
 
-    Alice.Lock();
-    ASSERT_THROW(test_tran.Make(Alice, Bob, 2000), std::runtime_error);
-    Alice.Unlock();
+TEST(Account, balance_positive) {
+    Account acc1(0, 1000);
+    EXPECT_EQ(acc1.GetBalance(), 1000);
 
-    ASSERT_TRUE(test_tran.Make(Alice, Bob, 2000));
-    ASSERT_EQ(Bob.GetBalance(), initial_balance_Bob + 2000);	
-    ASSERT_EQ(Alice.GetBalance(), initial_balance_Alice - 2000 - transaction_fee);
+    acc1.Lock();
+    EXPECT_NO_THROW(acc1.ChangeBalance(100));
 
-    ASSERT_FALSE(test_tran.Make(Alice, Bob, 8000));
-    ASSERT_EQ(Bob.GetBalance(), initial_balance_Bob + 2000);	
-    ASSERT_EQ(Alice.GetBalance(), initial_balance_Alice - 2000 - transaction_fee);
+    EXPECT_EQ(acc1.GetBalance(), 1100);
+}
+
+TEST(Accout, balance_negative) {
+    Account Vasya(1, 100);
+
+    EXPECT_THROW(Vasya.ChangeBalance(100), std::runtime_error);
+    
+    Vasya.Lock();
+    EXPECT_ANY_THROW(Vasya.Lock());
+}
+
+TEST(Transaction, construnct_and_positive) {
+    Transaction first;
+    EXPECT_EQ(first.fee(), 1);
+
+    Account Petya(0, 6132);
+    Account Katya(1, 2133);
+
+    first.set_fee(32);
+    EXPECT_EQ(first.fee(), 32);
+
+    EXPECT_TRUE(first.Make(Petya, Katya, 100));
+    EXPECT_EQ(Katya.GetBalance(), 2233);
+    EXPECT_EQ(Petya.GetBalance(), 6000);
+
+}
+
+TEST(Transaction, negative) {
+    Transaction second;
+    second.set_fee(51);
+    Account Roma(0, 10);
+    Account Misha(1, 1000);
+
+    EXPECT_THROW(second.Make(Misha, Misha, 0), std::logic_error);
+
+    EXPECT_THROW(second.Make(Misha, Roma, -100), std::invalid_argument);
+
+    EXPECT_THROW(second.Make(Misha, Roma, 50), std::logic_error);
+
+    EXPECT_FALSE(second.Make(Misha, Roma, 100));
+
+    second.set_fee(10);
+
+    EXPECT_FALSE(second.Make(Roma, Misha, 100));
+    
 }
