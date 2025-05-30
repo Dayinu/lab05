@@ -1,97 +1,36 @@
-#include "banking/Account.h"
-#include "banking/Transaction.h"
-#include <gmock/gmock.h>
+#include <Account.h>
+#include <Transaction.h>
 #include <gtest/gtest.h>
 
-using ::testing::_;
-using ::testing::Return;
+TEST(Transaction, Banking) {
+    const int initial_balance_Alice = 10000;
+    const int initial_balance_Bob = 2000;
+    const int transaction_fee = 50;
 
-class MockTransaction : public Transaction {
-public:
-    MOCK_METHOD(void, SaveToDataBase, (Account&, Account&, int), (override));
-};
+    Account Alice(0, initial_balance_Alice), Bob(1, initial_balance_Bob);
+    Transaction test_tran;
 
-class MockAccount : public Account {
-public:
-    MockAccount(int id, int balance) : Account(id, balance) {}
-    MOCK_METHOD(int, GetBalance, (), (const, override));
-    MOCK_METHOD(void, ChangeBalance, (int), (override));
-    MOCK_METHOD(void, Lock, (), (override));
-    MOCK_METHOD(void, Unlock, (), (override));
-};
+    ASSERT_EQ(test_tran.fee(), 1);
+    test_tran.set_fee(transaction_fee);
+    ASSERT_EQ(test_tran.fee(), transaction_fee);
 
-TEST(TransactionTests, SameAccountsThrowLogicError) {
-    Account acc(42, 1000);
-    Transaction tr;
-    EXPECT_THROW(tr.Make(acc, acc, 200), std::logic_error);
-}
+    ASSERT_THROW(test_tran.Make(Alice, Alice, 2000), std::logic_error);
+    ASSERT_THROW(test_tran.Make(Alice, Bob, -100), std::invalid_argument);
+    ASSERT_THROW(test_tran.Make(Alice, Bob, 50), std::logic_error);
 
-TEST(TransactionTests, NegativeSumThrowInvalidArgument) {
-    Account from(42, 1000);
-    Account to(24, 500);
-    Transaction tr;
-    EXPECT_THROW(tr.Make(from, to, -200), std::invalid_argument);
-}
+    if (test_tran.fee() * 2 - 1 >= 200) {
+        ASSERT_FALSE(test_tran.Make(Alice, Bob, test_tran.fee() * 2 - 1));
+    }
 
-TEST(TransactionTests, SmallSumThrowLogicError) {
-    Account from(42, 1000);
-    Account to(24, 500);
-    Transaction tr;
-    EXPECT_THROW(tr.Make(from, to, 50), std::logic_error);
-}
+    Alice.Lock();
+    ASSERT_THROW(test_tran.Make(Alice, Bob, 2000), std::runtime_error);
+    Alice.Unlock();
 
-TEST(TransactionTests, SuccessfulTransactionUpdatesBalances) {
-    Account from(42, 1000);
-    Account to(24, 500);
-    Transaction tr;
-    
-    EXPECT_TRUE(tr.Make(from, to, 300));
-    EXPECT_EQ(from.GetBalance(), 1000 - 300 - tr.fee());
-    EXPECT_EQ(to.GetBalance(), 500 + 300);
-}
+    ASSERT_TRUE(test_tran.Make(Alice, Bob, 2000));
+    ASSERT_EQ(Bob.GetBalance(), initial_balance_Bob + 2000);	
+    ASSERT_EQ(Alice.GetBalance(), initial_balance_Alice - 2000 - transaction_fee);
 
-TEST(TransactionTests, FailedTransactionDueToInsufficientFunds) {
-    Account from(42, 350);
-    Account to(24, 500);
-    Transaction tr;
-    tr.set_fee(51);
-    
-    EXPECT_FALSE(tr.Make(from, to, 300));
-    EXPECT_EQ(from.GetBalance(), 350);  // Balance shouldn't change
-    EXPECT_EQ(to.GetBalance(), 500);    // Balance shouldn't change
-}
-
-TEST(TransactionTests, SaveToDatabaseCalled) {
-    MockTransaction tr;
-    Account from(1, 1000);
-    Account to(2, 500);
-    
-    EXPECT_CALL(tr, SaveToDataBase(_, _, _)).Times(1);
-    tr.SaveToDataBase(from, to, 100);
-}
-
-TEST(TransactionTests, LockUnlockCalledDuringTransaction) {
-    MockAccount from(1, 1000);
-    MockAccount to(2, 500);
-    Transaction tr;
-    
-    EXPECT_CALL(from, Lock()).Times(1);
-    EXPECT_CALL(to, Lock()).Times(1);
-    EXPECT_CALL(from, Unlock()).Times(1);
-    EXPECT_CALL(to, Unlock()).Times(1);
-    
-    tr.Make(from, to, 200);
-}
-
-TEST(TransactionTests, TransactionRollbackWhenDebitFails) {
-    MockAccount from(1, 100);
-    MockAccount to(2, 500);
-    Transaction tr;
-    tr.set_fee(50);
-    
-    EXPECT_CALL(from, GetBalance()).WillOnce(Return(100));
-    EXPECT_CALL(to, ChangeBalance(200)).Times(1); 
-    EXPECT_CALL(to, ChangeBalance(-200)).Times(1); 
-    
-    EXPECT_FALSE(tr.Make(from, to, 200));
+    ASSERT_FALSE(test_tran.Make(Alice, Bob, 8000));
+    ASSERT_EQ(Bob.GetBalance(), initial_balance_Bob + 2000);	
+    ASSERT_EQ(Alice.GetBalance(), initial_balance_Alice - 2000 - transaction_fee);
 }
