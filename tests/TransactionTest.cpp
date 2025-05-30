@@ -1,8 +1,58 @@
 #include <Account.h>
 #include <Transaction.h>
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-TEST(Transaction, Banking) {
+class MockAccount : public Account {
+public:
+    MockAccount(int id, int balance) : Account(id, balance) {}
+    MOCK_METHOD(int, GetBalance, (), (const, override));
+    MOCK_METHOD(void, ChangeBalance, (int), (override));
+    MOCK_METHOD(void, Lock, (), (override));
+    MOCK_METHOD(void, Unlock, (), (override));
+};
+
+class MockTransaction : public Transaction {
+public:
+    MOCK_METHOD(bool, Make, (Account& from, Account& to, int sum), (override));
+    MOCK_METHOD(int, fee, (), (const, override));
+};
+
+TEST(TransactionTest, MockTest) {
+    MockAccount from(1, 2000);
+    MockAccount to(2, 1000);
+    MockTransaction tr;
+    
+    // Настраиваем ожидания
+    EXPECT_CALL(tr, fee())
+        .WillOnce(::testing::Return(50));
+    
+    EXPECT_CALL(from, Lock())
+        .Times(1);
+    
+    EXPECT_CALL(to, Lock())
+        .Times(1);
+    
+    EXPECT_CALL(from, GetBalance())
+        .WillOnce(::testing::Return(2000));
+    
+    EXPECT_CALL(from, ChangeBalance(-2050))  // сумма + комиссия
+        .WillOnce(::testing::Return());
+    
+    EXPECT_CALL(to, ChangeBalance(2000))
+        .WillOnce(::testing::Return());
+    
+    EXPECT_CALL(from, Unlock())
+        .Times(1);
+    
+    EXPECT_CALL(to, Unlock())
+        .Times(1);
+    
+    // Выполняем тест
+    ASSERT_TRUE(tr.Make(from, to, 2000));
+}
+
+TEST(TransactionTest, Banking) {
     const int initial_balance_Alice = 10000;
     const int initial_balance_Bob = 2000;
     const int transaction_fee = 50;
