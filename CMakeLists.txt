@@ -21,3 +21,16 @@ if(BUILD_TESTS)
   target_link_libraries(check banking gtest_main gmock_main)
   add_test(NAME check COMMAND check)
 endif()
+
+find_package(GTest REQUIRED COMPONENTS gmock_main)
+
+add_executable(tests
+    tests/AccountTest.cpp
+    tests/TransactionTest.cpp
+)
+
+target_link_libraries(tests
+    PRIVATE
+    banking
+    GTest::gmock_main
+)
