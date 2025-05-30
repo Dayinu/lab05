@@ -27,7 +27,7 @@ jobs:
     run: cmake --build ${{github.workspace}}/build
 
   - name: Run tests
-    run: build/check
+    run: ${{github.workspace}}/build/tests
 
 
   - name: Create coverage directory
