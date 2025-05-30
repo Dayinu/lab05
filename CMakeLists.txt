@@ -31,8 +31,9 @@ if(BUILD_TESTS)
     )
 
     # Директории для включения
-    target_include_directories(tests PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/banking
+     target_include_directories(tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}         # Корень проекта (для #include "banking/...")
+        ${CMAKE_CURRENT_SOURCE_DIR}/banking # Прямой путь к банковским заголовкам
     )
 
     # Связываем зависимости
