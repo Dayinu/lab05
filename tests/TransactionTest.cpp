@@ -3,6 +3,9 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
+using ::testing::Return;
+using ::testing::_;
+
 class MockAccount : public Account {
 public:
     MockAccount(int id, int balance) : Account(id, balance) {}
@@ -14,73 +17,76 @@ public:
 
 class MockTransaction : public Transaction {
 public:
-    MOCK_METHOD(bool, Make, (Account& from, Account& to, int sum));
-    MOCK_METHOD(int, fee, (), (const));
+    MOCK_METHOD(void, SaveToDataBase, (Account& from, Account& to, int sum), (override));
 };
 
-TEST(TransactionTest, MockTest) {
-    MockAccount from(1, 2000);
+TEST(TransactionTest, MakeTransactionSuccess) {
+    MockAccount from(1, 3000);  // Достаточный баланс
     MockAccount to(2, 1000);
-    MockTransaction tr;
-    
-    // Настраиваем ожидания
-    EXPECT_CALL(tr, fee())
-        .WillOnce(::testing::Return(50));
-    
-    EXPECT_CALL(from, Lock())
-        .Times(1);
-    
-    EXPECT_CALL(to, Lock())
-        .Times(1);
-    
-    EXPECT_CALL(from, GetBalance())
-        .WillOnce(::testing::Return(2000));
-    
-    EXPECT_CALL(from, ChangeBalance(-2050))  // сумма + комиссия
-        .WillOnce(::testing::Return());
-    
-    EXPECT_CALL(to, ChangeBalance(2000))
-        .WillOnce(::testing::Return());
-    
-    EXPECT_CALL(from, Unlock())
-        .Times(1);
-    
-    EXPECT_CALL(to, Unlock())
-        .Times(1);
-    
-    // Выполняем тест
+    Transaction tr;
+    tr.set_fee(50);  // Устанавливаем комиссию
+
+    // Ожидаемые вызовы
+    EXPECT_CALL(from, Lock()).Times(1);
+    EXPECT_CALL(to, Lock()).Times(1);
+    EXPECT_CALL(from, GetBalance()).WillOnce(Return(3000));
+    EXPECT_CALL(to, ChangeBalance(2000)).Times(1);  // Кредитуем получателя
+    EXPECT_CALL(from, ChangeBalance(-2050)).Times(1);  // Дебитуем отправителя (сумма + комиссия)
+    EXPECT_CALL(from, Unlock()).Times(1);
+    EXPECT_CALL(to, Unlock()).Times(1);
+
     ASSERT_TRUE(tr.Make(from, to, 2000));
 }
 
-TEST(TransactionTest, Banking) {
-    const int initial_balance_Alice = 10000;
-    const int initial_balance_Bob = 2000;
-    const int transaction_fee = 50;
+TEST(TransactionTest, MakeTransactionInsufficientFunds) {
+    MockAccount from(1, 1000);  // Недостаточный баланс
+    MockAccount to(2, 1000);
+    Transaction tr;
+    tr.set_fee(50);
 
-    Account Alice(0, initial_balance_Alice), Bob(1, initial_balance_Bob);
-    Transaction test_tran;
+    EXPECT_CALL(from, Lock()).Times(1);
+    EXPECT_CALL(to, Lock()).Times(1);
+    EXPECT_CALL(from, GetBalance()).WillOnce(Return(1000));
+    EXPECT_CALL(to, ChangeBalance(2000)).Times(1);
+    EXPECT_CALL(to, ChangeBalance(-2000)).Times(1);  // Откат транзакции
+    EXPECT_CALL(from, Unlock()).Times(1);
+    EXPECT_CALL(to, Unlock()).Times(1);
 
-    ASSERT_EQ(test_tran.fee(), 1);
-    test_tran.set_fee(transaction_fee);
-    ASSERT_EQ(test_tran.fee(), transaction_fee);
+    ASSERT_FALSE(tr.Make(from, to, 2000));
+}
 
-    ASSERT_THROW(test_tran.Make(Alice, Alice, 2000), std::logic_error);
-    ASSERT_THROW(test_tran.Make(Alice, Bob, -100), std::invalid_argument);
-    ASSERT_THROW(test_tran.Make(Alice, Bob, 50), std::logic_error);
+TEST(TransactionTest, MakeTransactionInvalidCases) {
+    Account alice(1, 1000);
+    Account bob(2, 1000);
+    Transaction tr;
 
-    if (test_tran.fee() * 2 - 1 >= 200) {
-        ASSERT_FALSE(test_tran.Make(Alice, Bob, test_tran.fee() * 2 - 1));
-    }
+    // Попытка перевода самому себе
+    ASSERT_THROW(tr.Make(alice, alice, 200), std::logic_error);
+    
+    // Отрицательная сумма
+    ASSERT_THROW(tr.Make(alice, bob, -100), std::invalid_argument);
+    
+    // Слишком маленькая сумма
+    ASSERT_THROW(tr.Make(alice, bob, 50), std::logic_error);
+    
+    // Сумма меньше чем 2*комиссия
+    tr.set_fee(60);
+    ASSERT_FALSE(tr.Make(alice, bob, 100));
+}
 
-    Alice.Lock();
-    ASSERT_THROW(test_tran.Make(Alice, Bob, 2000), std::runtime_error);
-    Alice.Unlock();
+TEST(TransactionTest, BankingIntegrationTest) {
+    Account alice(1, 10000);
+    Account bob(2, 2000);
+    Transaction tr;
+    tr.set_fee(50);
 
-    ASSERT_TRUE(test_tran.Make(Alice, Bob, 2000));
-    ASSERT_EQ(Bob.GetBalance(), initial_balance_Bob + 2000);	
-    ASSERT_EQ(Alice.GetBalance(), initial_balance_Alice - 2000 - transaction_fee);
+    // Успешная транзакция
+    ASSERT_TRUE(tr.Make(alice, bob, 2000));
+    ASSERT_EQ(alice.GetBalance(), 10000 - 2000 - 50);
+    ASSERT_EQ(bob.GetBalance(), 2000 + 2000);
 
-    ASSERT_FALSE(test_tran.Make(Alice, Bob, 8000));
-    ASSERT_EQ(Bob.GetBalance(), initial_balance_Bob + 2000);	
-    ASSERT_EQ(Alice.GetBalance(), initial_balance_Alice - 2000 - transaction_fee);
+    // Неудачная транзакция (недостаточно средств)
+    ASSERT_FALSE(tr.Make(alice, bob, 8000));
+    ASSERT_EQ(alice.GetBalance(), 10000 - 2000 - 50);  // Баланс не изменился
+    ASSERT_EQ(bob.GetBalance(), 2000 + 2000);
 }
