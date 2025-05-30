@@ -6,16 +6,16 @@
 class MockAccount : public Account {
 public:
     MockAccount(int id, int balance) : Account(id, balance) {}
-    MOCK_METHOD(int, GetBalance, (), (const, override));
-    MOCK_METHOD(void, ChangeBalance, (int), (override));
-    MOCK_METHOD(void, Lock, (), (override));
-    MOCK_METHOD(void, Unlock, (), (override));
+    MOCK_METHOD(int, GetBalance, (), (const));
+    MOCK_METHOD(void, ChangeBalance, (int));
+    MOCK_METHOD(void, Lock, ());
+    MOCK_METHOD(void, Unlock, ());
 };
 
 class MockTransaction : public Transaction {
 public:
-    MOCK_METHOD(bool, Make, (Account& from, Account& to, int sum), (override));
-    MOCK_METHOD(int, fee, (), (const, override));
+    MOCK_METHOD(bool, Make, (Account& from, Account& to, int sum));
+    MOCK_METHOD(int, fee, (), (const));
 };
 
 TEST(TransactionTest, MockTest) {
